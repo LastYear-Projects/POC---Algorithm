@@ -1,0 +1,23 @@
+{
+  "name": "poc---algorithm",
+  "version": "1.0.0",
+  "description": "This is our POC to the finalProject",
+  "main": "index.js",
+  "scripts": {
+    "start": "nodemon index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LastYear-Projects/POC---Algorithm.git"
+  },
+  "author": "SwipeAdvisor",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/LastYear-Projects/POC---Algorithm/issues"
+  },
+  "homepage": "https://github.com/LastYear-Projects/POC---Algorithm#readme",
+  "dependencies": {
+    "nodemon": "^3.1.1"
+  }
+}
