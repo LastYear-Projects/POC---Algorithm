@@ -1,4 +1,13 @@
 //TODO - Refactor types, and move to other files.
+//TODO - Change between ValueType to DiscountType.
+//TODO - make a match between the types from the db.
+//TODO - Remove all data except the userPreferences.
+
+/*
+ מוציאים את כל ההטבות בין אם בית העסק קיים או אם למשתמש יש את האשראי הרלוונטי.
+  מחשבים את הדירוג של כל ההטבות על פי ההעדפות של המשתמש. לאשראי מסוים ולא לפי הטבה
+  מחזירים את ההטבות ממוינות לפי הדירוג.
+*/
 
 enum ValueType {
   POINTS = "points",
@@ -130,7 +139,7 @@ const grading = (
       //What to do with points, they are not directly effecting all credit cards.(Will explain).
       break;
   }
-  return { benefit, grade };
+  return { benefit, grade }; // return only the grade, we already have the benefit.
 };
 
 const gradingAlgorithm = (
@@ -141,8 +150,8 @@ const gradingAlgorithm = (
   const gradedBenefits: GradedBenefit[] = [];
 
   benefits.forEach((benefit) => {
-    gradedBenefits.push(grading(benefit, userPreferences, transactionPrice));
+    gradedBenefits.push(grading(benefit, userPreferences, transactionPrice)); // add the grade to the gradedBenefits array.
   });
 
-  return gradedBenefits.sort((a, b) => a.grade - b.grade);
+  return gradedBenefits.sort((a, b) => a.grade - b.grade); // b-a for descending order.
 };
