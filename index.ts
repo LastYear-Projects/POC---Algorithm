@@ -1,157 +1,102 @@
-//TODO - Refactor types, and move to other files.
-//TODO - Change between ValueType to DiscountType.
-//TODO - make a match between the types from the db.
-//TODO - Remove all data except the userPreferences.
+import { ValueType, DiscountType, CreditCard, Business, Benefit, UserPreferences, GradedBenefit } from './types';
 
-/*
- מוציאים את כל ההטבות בין אם בית העסק קיים או אם למשתמש יש את האשראי הרלוונטי.
-  מחשבים את הדירוג של כל ההטבות על פי ההעדפות של המשתמש. לאשראי מסוים ולא לפי הטבה
-  מחזירים את ההטבות ממוינות לפי הדירוג.
-*/
-
-enum ValueType {
-  POINTS = "points",
-  CASHBACK = "cashback", //User cannot choose cashback as an option, Its an added bonus to
-  //the respective credit card.
-  DISCOUNT = "discount",
-}
-
-enum DiscountType {
-  PERCENTAGE = "percentage",
-  NUMBER = "number",
-}
-
-type CreditCard = {
-  id: number;
-  name: string;
-};
-
-type Business = {
-  id: number;
-  name: string;
-};
-
-type Benefit = {
-  businessId?: number;
-  creditCardId: number;
-  valueType: ValueType;
-  discountType: DiscountType;
-  value: number;
-};
-
-type UserPreferences = {
-  creditCardsIds: number[];
-  valueType: ValueType;
-};
-
-//----------------------------------DUMMY DATA------------------------------------
+// Dummy data
 const creditCards: CreditCard[] = [
-  {
-    id: 0,
-    name: "visa",
-  },
-  {
-    id: 1,
-    name: "isracard",
-  },
+  { id: 0, name: "visa" },
+  { id: 1, name: "isracard" },
 ];
 
 const businesses: Business[] = [
-  {
-    id: 0,
-    name: "burekas-ha-agala",
-  },
-  {
-    id: 1,
-    name: "golda",
-  },
+  { id: 0, name: "burekas-ha-agala" },
+  { id: 1, name: "golda" },
 ];
 
 const benefits: Benefit[] = [
-  {
-    businessId: 0,
-    creditCardId: 0,
-    discountType: DiscountType.PERCENTAGE,
-    valueType: ValueType.DISCOUNT,
-    value: 30,
-  },
-  {
-    businessId: 1,
-    creditCardId: 1,
-    discountType: DiscountType.NUMBER,
-    valueType: ValueType.CASHBACK,
-    value: 15,
-  },
-  {
-    creditCardId: 0,
-    discountType: DiscountType.NUMBER,
-    valueType: ValueType.POINTS,
-    value: 50,
-  },
+  { businessId: 0, creditCardId: 0, valueType: ValueType.PERCENTAGE, discountType: DiscountType.DISCOUNT, value: 30 },
+  { businessId: 1, creditCardId: 1, valueType: ValueType.NUMBER, discountType: DiscountType.CASHBACK, value: 15 },
+  { creditCardId: 0, valueType: ValueType.NUMBER, discountType: DiscountType.POINTS, value: 50 },
+  { creditCardId: 0, valueType: ValueType.NUMBER, discountType: DiscountType.CASHBACK, value: 10 }, // Cashback for credit card 0
 ];
 
 const userPreferences: UserPreferences[] = [
-  {
-    creditCardsIds: [0, 1],
-    valueType: ValueType.DISCOUNT,
-  },
-  {
-    creditCardsIds: [1, 0],
-    valueType: ValueType.DISCOUNT,
-  },
-  {
-    creditCardsIds: [1, 0],
-    valueType: ValueType.POINTS,
-  },
+  { creditCardsIds: [0, 1], discountType: DiscountType.DISCOUNT },
+  { creditCardsIds: [1, 0], discountType: DiscountType.DISCOUNT },
+  { creditCardsIds: [1, 0], discountType: DiscountType.POINTS },
+  { creditCardsIds: [0], discountType: DiscountType.POINTS },
+  { creditCardsIds: [1], discountType: DiscountType.CASHBACK },
 ];
-//----------------------------------END OF DUMMY DATA------------------------------------
 
-//Example for point to money conversion.
-const pointsToMoneyMap = {
-  flycard: 5,
-  foxhome: 2,
-  burekasHaAgala: 7,
+// Mapping points to money conversion based on credit card names
+const pointsToMoneyMap: { [key: string]: number } = {
+  visa: 5, // for creditCardId 0
+  isracard: 2, // for creditCardId 1
+  burekasHaAgala: 7, // Assuming this was for a business ID, but not used in this context
 };
 
-//Work with tuples or with this Type.
-type GradedBenefit = {
-  benefit: Benefit;
-  grade: number;
-};
+/**
+ * Converts a benefit to a graded benefit based on user preferences and transaction price.
+ * Adds a bonus for cashback benefits tied to a credit card.
+ * @param {Benefit} benefit - The benefit to grade.
+ * @param {UserPreferences} userPreferences - The user's preferences.
+ * @param {number} transactionPrice - The price of the transaction.
+ * @param {Benefit[]} allBenefits - The list of all benefits to check for credit card cashback.
+ * @returns {number} - The grade of the benefit.
+ */
+const grading = (benefit: Benefit, userPreferences: UserPreferences, transactionPrice: number, allBenefits: Benefit[]): number => {
+  let grade = 0;
 
-const grading = (
-  benefit: Benefit,
-  userPreferences: UserPreferences,
-  transactionPrice: number
-) => {
-  let grade: number = 0;
-  if (benefit.valueType === ValueType.CASHBACK) return { benefit, grade: 0 };
-  switch (userPreferences.valueType) {
-    case ValueType.DISCOUNT:
-      //Percentage turns into number and graded appropriately.
-      if (benefit.discountType === DiscountType.PERCENTAGE) {
-        grade = transactionPrice - transactionPrice * (benefit.value / 100);
+  // Find if the credit card itself has a cashback benefit
+  const creditCardCashbackBenefit = allBenefits.find(b => b.creditCardId === benefit.creditCardId && b.discountType === DiscountType.CASHBACK && !b.businessId);
+  const cashbackBonus = creditCardCashbackBenefit ? creditCardCashbackBenefit.value : 0;
+
+  switch (userPreferences.discountType) {
+    case DiscountType.DISCOUNT:
+      if (benefit.valueType === ValueType.PERCENTAGE) {
+        grade = transactionPrice - (transactionPrice * (benefit.value / 100)) + cashbackBonus;
       } else {
-        grade = transactionPrice - benefit.value;
+        grade = transactionPrice - benefit.value + cashbackBonus;
       }
       break;
-    case ValueType.POINTS:
-      //What to do with points, they are not directly effecting all credit cards.(Will explain).
+    case DiscountType.POINTS:
+      // Convert points to money equivalent for grading
+      const creditCardName = creditCards.find(card => card.id === benefit.creditCardId)?.name || '';
+      const pointsValue = pointsToMoneyMap[creditCardName] || 0;
+      grade = transactionPrice - (benefit.value * pointsValue) + cashbackBonus;
       break;
   }
-  return { benefit, grade }; // return only the grade, we already have the benefit.
+  return grade;
 };
 
-const gradingAlgorithm = (
-  benefits: Benefit[],
-  userPreferences: UserPreferences,
-  transactionPrice: number
-) => {
-  const gradedBenefits: GradedBenefit[] = [];
+/**
+ * Sorts and grades benefits based on user preferences and transaction price.
+ * @param {Benefit[]} benefits - The list of benefits to grade.
+ * @param {UserPreferences} userPreferences - The user's preferences.
+ * @param {number} transactionPrice - The price of the transaction.
+ * @returns {GradedBenefit[]} - The list of graded benefits sorted in descending order of their grade.
+ */
+const gradingAlgorithm = (benefits: Benefit[], userPreferences: UserPreferences, transactionPrice: number): GradedBenefit[] => {
+  const gradedBenefits = benefits
+    .filter(benefit => userPreferences.creditCardsIds.includes(benefit.creditCardId))
+    .map(benefit => ({
+      benefit,
+      grade: grading(benefit, userPreferences, transactionPrice, benefits)
+    }));
 
-  benefits.forEach((benefit) => {
-    gradedBenefits.push(grading(benefit, userPreferences, transactionPrice)); // add the grade to the gradedBenefits array.
-  });
-
-  return gradedBenefits.sort((a, b) => a.grade - b.grade); // b-a for descending order.
+  return gradedBenefits.sort((a, b) => b.grade - a.grade);
 };
+
+// Example scenarios to test the algorithm
+const scenarios = [
+  { transactionAmount: 100, userPreference: userPreferences[0] },
+  { transactionAmount: 200, userPreference: userPreferences[1] },
+  { transactionAmount: 150, userPreference: userPreferences[2] },
+  { transactionAmount: 250, userPreference: userPreferences[3] },
+  { transactionAmount: 300, userPreference: userPreferences[4] },
+];
+
+// Run and log each scenario
+scenarios.forEach((scenario, index) => {
+  const sortedBenefits = gradingAlgorithm(benefits, scenario.userPreference, scenario.transactionAmount);
+  console.log(`Scenario ${index + 1}:`);
+  console.log(sortedBenefits);
+});
