@@ -1,102 +1,215 @@
-import { ValueType, DiscountType, CreditCard, Business, Benefit, UserPreferences, GradedBenefit } from './types';
+import mongoose from "mongoose";
 
-// Dummy data
-const creditCards: CreditCard[] = [
-  { id: 0, name: "visa" },
-  { id: 1, name: "isracard" },
-];
+export enum DiscountType {
+  POINTS = "points",
+  CASHBACK = "cashback", //User cannot choose cashback as an option, Its an added bonus to
+  //the respective credit card.
+  DISCOUNT = "discount",
+}
 
-const businesses: Business[] = [
-  { id: 0, name: "burekas-ha-agala" },
-  { id: 1, name: "golda" },
-];
-
-const benefits: Benefit[] = [
-  { businessId: 0, creditCardId: 0, valueType: ValueType.PERCENTAGE, discountType: DiscountType.DISCOUNT, value: 30 },
-  { businessId: 1, creditCardId: 1, valueType: ValueType.NUMBER, discountType: DiscountType.CASHBACK, value: 15 },
-  { creditCardId: 0, valueType: ValueType.NUMBER, discountType: DiscountType.POINTS, value: 50 },
-  { creditCardId: 0, valueType: ValueType.NUMBER, discountType: DiscountType.CASHBACK, value: 10 }, // Cashback for credit card 0
-];
-
-const userPreferences: UserPreferences[] = [
-  { creditCardsIds: [0, 1], discountType: DiscountType.DISCOUNT },
-  { creditCardsIds: [1, 0], discountType: DiscountType.DISCOUNT },
-  { creditCardsIds: [1, 0], discountType: DiscountType.POINTS },
-  { creditCardsIds: [0], discountType: DiscountType.POINTS },
-  { creditCardsIds: [1], discountType: DiscountType.CASHBACK },
-];
-
-// Mapping points to money conversion based on credit card names
-const pointsToMoneyMap: { [key: string]: number } = {
-  visa: 5, // for creditCardId 0
-  isracard: 2, // for creditCardId 1
-  burekasHaAgala: 7, // Assuming this was for a business ID, but not used in this context
+export type UserPreferences = {
+  profitType: ProfitType;
+  cardsPreference: mongoose.Schema.Types.ObjectId[];
 };
 
-/**
- * Converts a benefit to a graded benefit based on user preferences and transaction price.
- * Adds a bonus for cashback benefits tied to a credit card.
- * @param {Benefit} benefit - The benefit to grade.
- * @param {UserPreferences} userPreferences - The user's preferences.
- * @param {number} transactionPrice - The price of the transaction.
- * @param {Benefit[]} allBenefits - The list of all benefits to check for credit card cashback.
- * @returns {number} - The grade of the benefit.
- */
-const grading = (benefit: Benefit, userPreferences: UserPreferences, transactionPrice: number, allBenefits: Benefit[]): number => {
+export interface ICreditCard {
+  cardName: String;
+  pointToMoney: number;
+}
+
+export interface IBenefit {
+  businessId?: mongoose.Schema.Types.ObjectId;
+  creditCardId: mongoose.Schema.Types.ObjectId;
+  discountType: DiscountType;
+  valueType: ValueType;
+  value: number;
+  pointsValue?: number; // describes the mapping between points --> shekels. for example - 0.01 means that 1 points worth 0.01 shekels. (exists only in points benefits)
+  maxProfit?: number; //for a percentage benefit - describe the maximum profit a user can achieve. (may exists only in percentage)
+  minPurchaseAmount?: number; // for a number benefit - describe the minimum purchase amount should be to activate the benefit. (exists only in number benefits)
+}
+
+export enum ProfitType {
+  POINTS = "points",
+  LOWEST_PRICE = "lowestPrice",
+  NOMINAL_PROFIT = "nominalProfit",
+}
+
+export interface PopulatedBenefit extends IBenefit {
+  creditCard: ICreditCard;
+}
+
+export enum ValueType {
+  PERCENTAGE = "percentage",
+  NUMBER = "number",
+}
+
+export type EvaluatedCreditCard = {
+  creditCardId: mongoose.Schema.Types.ObjectId;
+  grade: number;
+  profit: number;
+};
+
+const card1Id =
+  new mongoose.Types.ObjectId() as any as mongoose.Schema.Types.ObjectId;
+const card2Id =
+  new mongoose.Types.ObjectId() as any as mongoose.Schema.Types.ObjectId;
+const card3Id =
+  new mongoose.Types.ObjectId() as any as mongoose.Schema.Types.ObjectId;
+
+const userPreferences: UserPreferences = {
+  profitType: ProfitType.LOWEST_PRICE,
+  cardsPreference: [card1Id, card2Id, card3Id],
+};
+
+const creditCard1: ICreditCard = {
+  cardName: "Card One",
+  pointToMoney: 0.01,
+};
+
+const creditCard2: ICreditCard = {
+  cardName: "Card Two",
+  pointToMoney: 0.02,
+};
+
+const creditCard3: ICreditCard = {
+  cardName: "Card Three",
+  pointToMoney: 0.015,
+};
+
+const populatedBenefits: PopulatedBenefit[] = [
+  {
+    creditCard: creditCard1,
+    creditCardId: card1Id,
+    discountType: DiscountType.DISCOUNT,
+    valueType: ValueType.PERCENTAGE,
+    value: 10,
+  },
+  {
+    creditCard: creditCard2,
+    creditCardId: card2Id,
+    discountType: DiscountType.POINTS,
+    valueType: ValueType.NUMBER,
+    value: 100,
+  },
+  {
+    creditCard: creditCard3,
+    creditCardId: card3Id,
+    discountType: DiscountType.CASHBACK,
+    valueType: ValueType.NUMBER,
+    value: 50,
+  },
+];
+
+// Corrected Functions
+
+const calculateGrade = (
+  populatedBenefit: PopulatedBenefit,
+  transactionPrice: number
+): number => {
   let grade = 0;
 
-  // Find if the credit card itself has a cashback benefit
-  const creditCardCashbackBenefit = allBenefits.find(b => b.creditCardId === benefit.creditCardId && b.discountType === DiscountType.CASHBACK && !b.businessId);
-  const cashbackBonus = creditCardCashbackBenefit ? creditCardCashbackBenefit.value : 0;
-
-  switch (userPreferences.discountType) {
+  switch (populatedBenefit.discountType) {
     case DiscountType.DISCOUNT:
-      if (benefit.valueType === ValueType.PERCENTAGE) {
-        grade = transactionPrice - (transactionPrice * (benefit.value / 100)) + cashbackBonus;
+      if (populatedBenefit.valueType === ValueType.PERCENTAGE) {
+        grade = transactionPrice * (populatedBenefit.value / 100);
       } else {
-        grade = transactionPrice - benefit.value + cashbackBonus;
+        grade = populatedBenefit.value;
       }
       break;
     case DiscountType.POINTS:
-      // Convert points to money equivalent for grading
-      const creditCardName = creditCards.find(card => card.id === benefit.creditCardId)?.name || '';
-      const pointsValue = pointsToMoneyMap[creditCardName] || 0;
-      grade = transactionPrice - (benefit.value * pointsValue) + cashbackBonus;
+      const pointToMoneyValue = populatedBenefit.creditCard.pointToMoney;
+      grade = populatedBenefit.value * pointToMoneyValue;
       break;
   }
   return grade;
 };
 
-/**
- * Sorts and grades benefits based on user preferences and transaction price.
- * @param {Benefit[]} benefits - The list of benefits to grade.
- * @param {UserPreferences} userPreferences - The user's preferences.
- * @param {number} transactionPrice - The price of the transaction.
- * @returns {GradedBenefit[]} - The list of graded benefits sorted in descending order of their grade.
- */
-const gradingAlgorithm = (benefits: Benefit[], userPreferences: UserPreferences, transactionPrice: number): GradedBenefit[] => {
-  const gradedBenefits = benefits
-    .filter(benefit => userPreferences.creditCardsIds.includes(benefit.creditCardId))
-    .map(benefit => ({
-      benefit,
-      grade: grading(benefit, userPreferences, transactionPrice, benefits)
-    }));
-
-  return gradedBenefits.sort((a, b) => b.grade - a.grade);
+const evaluatedCreditCardsWithCashBack = (
+  userPreferences: UserPreferences,
+  populatedBenefits: PopulatedBenefit[]
+): EvaluatedCreditCard[] => {
+  return userPreferences.cardsPreference.map((creditCard) => {
+    const cashBackBenefit = populatedBenefits.find(
+      (benefit) =>
+        benefit.creditCardId === creditCard &&
+        benefit.discountType === DiscountType.CASHBACK &&
+        !benefit.businessId
+    );
+    const cashbackValue =
+      (cashBackBenefit?.creditCard.pointToMoney ?? 0) *
+      (cashBackBenefit?.value ?? 0);
+    return {
+      creditCardId: creditCard,
+      grade: cashbackValue,
+      profit: cashbackValue,
+    };
+  });
 };
 
-// Example scenarios to test the algorithm
-const scenarios = [
-  { transactionAmount: 100, userPreference: userPreferences[0] },
-  { transactionAmount: 200, userPreference: userPreferences[1] },
-  { transactionAmount: 150, userPreference: userPreferences[2] },
-  { transactionAmount: 250, userPreference: userPreferences[3] },
-  { transactionAmount: 300, userPreference: userPreferences[4] },
-];
+const gradePopulatedBenefits = (
+  populatedBenefits: PopulatedBenefit[],
+  transactionAmount: number
+) => {
+  return populatedBenefits.map((populatedBenefit) => ({
+    populatedBenefit,
+    grade: calculateGrade(populatedBenefit, transactionAmount),
+  }));
+};
 
-// Run and log each scenario
-scenarios.forEach((scenario, index) => {
-  const sortedBenefits = gradingAlgorithm(benefits, scenario.userPreference, scenario.transactionAmount);
-  console.log(`Scenario ${index + 1}:`);
-  console.log(sortedBenefits);
-});
+const findBestBenefit = (
+  gradedPopulatedBenefits: {
+    populatedBenefit: PopulatedBenefit;
+    grade: number;
+  }[],
+  creditCardId: mongoose.Schema.Types.ObjectId
+) => {
+  return gradedPopulatedBenefits
+    .filter(
+      (populatedMapObject) =>
+        populatedMapObject.populatedBenefit.creditCardId === creditCardId
+    )
+    .sort((a, b) => b.grade - a.grade)[0];
+};
+
+const getRecommendations = (
+  populatedBenefits: PopulatedBenefit[],
+  userPreferences: UserPreferences,
+  transactionAmount: number
+): EvaluatedCreditCard[] => {
+  const evaluatedCreditCards = evaluatedCreditCardsWithCashBack(
+    userPreferences,
+    populatedBenefits
+  );
+
+  const gradedPopulatedBenefits = gradePopulatedBenefits(
+    populatedBenefits,
+    transactionAmount
+  );
+
+  evaluatedCreditCards.forEach((evaluatedCreditCard) => {
+    const bestBenefitMapObject = findBestBenefit(
+      gradedPopulatedBenefits,
+      evaluatedCreditCard.creditCardId
+    );
+    if (bestBenefitMapObject) {
+      evaluatedCreditCard.grade += bestBenefitMapObject.grade;
+      evaluatedCreditCard.profit += bestBenefitMapObject.grade;
+    }
+  });
+
+  return evaluatedCreditCards.sort((a, b) => b.grade - a.grade);
+};
+
+// Test Function
+const testGetRecommendations = () => {
+  const transactionAmount = 1000;
+  const recommendations = getRecommendations(
+    populatedBenefits,
+    userPreferences,
+    transactionAmount
+  );
+
+  console.log("Recommendations:", recommendations);
+};
+
+testGetRecommendations();

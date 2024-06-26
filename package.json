@@ -19,6 +19,7 @@
   "homepage": "https://github.com/LastYear-Projects/POC---Algorithm#readme",
   "dependencies": {
     "@types/node": "^20.12.12",
+    "mongoose": "^8.4.4",
     "nodemon": "^3.1.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
